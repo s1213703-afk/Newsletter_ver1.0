@@ -1,0 +1,28 @@
+name: News Bot
+
+on:
+  schedule:
+    - cron: '0 0 * * *'    # 한국 오전 9시
+    - cron: '0 10 * * *'   # 한국 오후 7시
+  workflow_dispatch:         # 수동 실행 버튼
+
+jobs:
+  send-news:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Python 설정
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: 라이브러리 설치
+        run: pip install -r requirements.txt
+
+      - name: 뉴스봇 실행
+        env:
+          GMAIL_ADDRESS:      ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          RECV_ADDRESS:       ${{ secrets.RECV_ADDRESS }}
+        run: python news_bot.py
