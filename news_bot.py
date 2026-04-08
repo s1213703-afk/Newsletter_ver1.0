@@ -22,14 +22,13 @@ GOOGLE_NEWS_RSS = {
     "두피":   "https://news.google.com/rss/search?q=두피케어&hl=ko&gl=KR&ceid=KR:ko",
 }
 
-FALLBACK_RSS        = "https://news.google.com/rss/search?q=뷰티+화장품&hl=ko&gl=KR&ceid=KR:ko"
-MAX_PER_CATEGORY    = 2   # 카테고리별 최대 기사 수
-FALLBACK_COUNT      = 5
+FALLBACK_RSS     = "https://news.google.com/rss/search?q=뷰티+화장품&hl=ko&gl=KR&ceid=KR:ko"
+MAX_PER_CATEGORY = 2
+FALLBACK_COUNT   = 5
 
 
 def fetch_news():
-    """카테고리별 키워드 매칭 기사 최대 2개씩"""
-    results = {}   # {카테고리: [기사, ...]}
+    results = {}
     seen = set()
 
     for cat, url in GOOGLE_NEWS_RSS.items():
@@ -86,10 +85,9 @@ def fetch_fallback():
 
 
 def build_html(category_results, fallback_articles):
-    now = datetime.now().strftime("%Y년 %m월 %d일 %H:%M")
+    now   = datetime.now().strftime("%Y년 %m월 %d일 %H:%M")
     total = sum(len(v) for v in category_results.values())
 
-    # ── 키워드 매칭 섹션 ──────────────────────────────
     keyword_rows = ""
     for cat, articles in category_results.items():
         if articles:
@@ -112,7 +110,6 @@ def build_html(category_results, fallback_articles):
               <td></td>
             </tr>"""
 
-    # ── 대체 기사 섹션 ────────────────────────────────
     fallback_section = ""
     if fallback_articles:
         fallback_rows = ""
@@ -161,24 +158,28 @@ def build_html(category_results, fallback_articles):
 
 
 def send_email(category_results, fallback_articles):
-    total = sum(len(v) for v in category_results.values())
-    now   = datetime.now().strftime("%m/%d %H:%M")
+    total   = sum(len(v) for v in category_results.values())
+    now     = datetime.now().strftime("%m/%d %H:%M")
     subject = f"📰 뷰티 뉴스 알림 [{now}] 키워드 {total}건"
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"]    = GMAIL_ADDRESS
-    msg["To"]      = ", ".join(RECV_ADDRESS)
+    msg["To"]      = GMAIL_ADDRESS            # 받는사람: 본인만 표시
+    msg["Bcc"]     = ", ".join(RECV_ADDRESS)  # 나머지는 숨은참조
+
     msg.attach(MIMEText(build_html(category_results, fallback_articles), "html", "utf-8"))
+
+    all_recipients = [GMAIL_ADDRESS] + RECV_ADDRESS  # 실제 전송 대상
 
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
         smtp.login(GMAIL_ADDRESS, GMAIL_APP_PASSWORD)
-        smtp.sendmail(GMAIL_ADDRESS, RECV_ADDRESS, msg.as_string())
+        smtp.sendmail(GMAIL_ADDRESS, all_recipients, msg.as_string())
     print(f"✅ 메일 전송 완료: 키워드 {total}건 + 대체 {len(fallback_articles)}건")
 
 
 if __name__ == "__main__":
     print(f"🔍 [{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 시작")
-    category_results = fetch_news()
+    category_results  = fetch_news()
     fallback_articles = fetch_fallback()
     send_email(category_results, fallback_articles)
