@@ -11,71 +11,130 @@ RECV_ADDRESS       = os.environ["RECV_ADDRESS"].split(",")
 
 KEYWORDS = ["팩케이크", "커브얼라이브", "이현이", "두피", "탈모"]
 
-NAVER_RSS_FEEDS = {
-    "정치":    "https://news.naver.com/main/rss/politics.nhn",
-    "경제":    "https://news.naver.com/main/rss/economy.nhn",
-    "사회":    "https://news.naver.com/main/rss/society.nhn",
-    "생활문화": "https://news.naver.com/main/rss/life.nhn",
-    "IT과학":  "https://news.naver.com/main/rss/it.nhn",
-    "세계":    "https://news.naver.com/main/rss/world.nhn",
+# ─── 뉴스 소스 1: 네이버 키워드 검색 RSS ─────────────
+NAVER_SEARCH_KEYWORDS = ["색조", "기초화장품", "건강기능식품", "탈모", "두피"]
+NAVER_SEARCH_RSS = {
+    kw: f"https://search.naver.com/rss?where=news&query={kw}"
+    for kw in NAVER_SEARCH_KEYWORDS
 }
 
-SELECTED_CATEGORIES = ["생활문화", "사회"]
-FALLBACK_CATEGORY   = "생활문화"
-FALLBACK_COUNT      = 5
-MAX_ARTICLES_PER_MAIL = 20
+# ─── 뉴스 소스 2: 뷰티 전문 매체 RSS ─────────────────
+BEAUTY_MEDIA_RSS = {
+    "데일리코스메틱": "https://www.dailycosmetic.com/rss/allArticle.xml",
+    "코스인":        "https://www.cosinkorea.com/rss/allArticle.xml",
+    "뷰티경제":      "https://www.beautynury.com/rss/allArticle.xml",
+}
 
-sent_urls = set()
+FALLBACK_COUNT       = 5
+MAX_ARTICLES_PER_MAIL = 20
 
 def fetch_news():
     matched = []
-    for cat in SELECTED_CATEGORIES:
-        if cat not in NAVER_RSS_FEEDS:
-            continue
+    seen = set()
+
+    # 소스 1: 네이버 키워드 검색 RSS
+    for kw, url in NAVER_SEARCH_RSS.items():
         try:
-            feed = feedparser.parse(NAVER_RSS_FEEDS[cat])
+            feed = feedparser.parse(url)
             for entry in feed.entries:
                 title   = entry.get("title", "").strip()
                 link    = entry.get("link", "").strip()
                 summary = entry.get("summary", "").strip()
                 pub     = entry.get("published", "")
-                if link in sent_urls:
+                if link in seen:
                     continue
                 text = title + " " + summary
-                if any(kw.lower() in text.lower() for kw in KEYWORDS):
+                if any(kw2.lower() in text.lower() for kw2 in KEYWORDS):
                     matched.append({
-                        "category": cat, "title": title,
-                        "link": link, "pub": pub,
+                        "category": f"네이버_{kw}",
+                        "title": title, "link": link, "pub": pub,
                         "summary": summary[:150] + "..." if len(summary) > 150 else summary,
                         "is_fallback": False,
                     })
+                    seen.add(link)
+            print(f"  [네이버 검색:{kw}] {len([a for a in matched if a['category']==f'네이버_{kw}'])}건")
         except Exception as e:
-            print(f"RSS 오류 ({cat}): {e}")
+            print(f"  ❌ 네이버 검색 오류 ({kw}): {e}")
+
+    # 소스 2: 뷰티 전문 매체 RSS
+    for media, url in BEAUTY_MEDIA_RSS.items():
+        count = 0
+        try:
+            feed = feedparser.parse(url)
+            for entry in feed.entries:
+                title   = entry.get("title", "").strip()
+                link    = entry.get("link", "").strip()
+                summary = entry.get("summary", "").strip()
+                pub     = entry.get("published", "")
+                if link in seen:
+                    continue
+                text = title + " " + summary
+                if any(kw2.lower() in text.lower() for kw2 in KEYWORDS):
+                    matched.append({
+                        "category": media,
+                        "title": title, "link": link, "pub": pub,
+                        "summary": summary[:150] + "..." if len(summary) > 150 else summary,
+                        "is_fallback": False,
+                    })
+                    seen.add(link)
+                    count += 1
+            print(f"  [{media}] {count}건")
+        except Exception as e:
+            print(f"  ❌ 매체 오류 ({media}): {e}")
+
     return matched
 
 def fetch_fallback():
+    """매칭 없을 때 — 뷰티 전문 매체 최신 5개"""
     articles = []
-    try:
-        feed = feedparser.parse(NAVER_RSS_FEEDS[FALLBACK_CATEGORY])
-        for entry in feed.entries[:FALLBACK_COUNT]:
-            articles.append({
-                "category": f"{FALLBACK_CATEGORY} (추천)",
-                "title":    entry.get("title", "").strip(),
-                "link":     entry.get("link", "").strip(),
-                "summary":  entry.get("summary", "")[:150],
-                "pub":      entry.get("published", ""),
-                "is_fallback": True,
-            })
-        print(f"대체 기사 {len(articles)}건 사용")
-    except Exception as e:
-        print(f"대체 기사 수집 오류: {e}")
+    seen = set()
+    for media, url in BEAUTY_MEDIA_RSS.items():
+        if len(articles) >= FALLBACK_COUNT:
+            break
+        try:
+            feed = feedparser.parse(url)
+            for entry in feed.entries:
+                if len(articles) >= FALLBACK_COUNT:
+                    break
+                link = entry.get("link", "").strip()
+                if link in seen:
+                    continue
+                articles.append({
+                    "category": f"{media} (추천)",
+                    "title":    entry.get("title", "").strip(),
+                    "link":     link,
+                    "summary":  entry.get("summary", "")[:150],
+                    "pub":      entry.get("published", ""),
+                    "is_fallback": True,
+                })
+                seen.add(link)
+        except Exception as e:
+            print(f"  대체 오류 ({media}): {e}")
+
+    # 뷰티 매체도 안되면 네이버 검색 최신순으로 대체
+    if not articles:
+        try:
+            feed = feedparser.parse("https://search.naver.com/rss?where=news&query=뷰티")
+            for entry in feed.entries[:FALLBACK_COUNT]:
+                articles.append({
+                    "category": "네이버_뷰티 (추천)",
+                    "title":    entry.get("title", "").strip(),
+                    "link":     entry.get("link", "").strip(),
+                    "summary":  entry.get("summary", "")[:150],
+                    "pub":      entry.get("published", ""),
+                    "is_fallback": True,
+                })
+        except Exception as e:
+            print(f"  네이버 대체 오류: {e}")
+
+    print(f"  대체 기사 {len(articles)}건 사용")
     return articles
 
 def build_html(articles, is_fallback):
     now = datetime.now().strftime("%Y년 %m월 %d일 %H:%M")
     header_color = "#e8891a" if is_fallback else "#1a73e8"
-    header_text  = "오늘의 뷰티 추천 뉴스" if is_fallback else "뉴스 알림"
-    sub_text     = f"키워드 매칭 없음 · {FALLBACK_CATEGORY} 최신 {FALLBACK_COUNT}건" if is_fallback else f"키워드: {', '.join(KEYWORDS)}"
+    header_text  = "오늘의 뷰티 추천 뉴스" if is_fallback else "뷰티 뉴스 알림"
+    sub_text     = f"키워드 매칭 없음 · 뷰티 최신 {FALLBACK_COUNT}건" if is_fallback else f"키워드: {', '.join(KEYWORDS)}"
     rows = ""
     for i, art in enumerate(articles, 1):
         bg = "#f9f9f9" if i % 2 == 0 else "#ffffff"
@@ -96,7 +155,7 @@ def build_html(articles, is_fallback):
       <table width="100%" cellspacing="0" cellpadding="0"
              style="border:1px solid #e0e0e0;border-top:none;border-radius:0 0 8px 8px">
         <thead><tr style="background:#f1f3f4">
-          <th style="padding:8px 10px;text-align:left;font-size:12px">카테고리</th>
+          <th style="padding:8px 10px;text-align:left;font-size:12px">출처</th>
           <th style="padding:8px 10px;text-align:left;font-size:12px">기사</th>
           <th style="padding:8px 10px;text-align:left;font-size:12px">시간</th>
         </tr></thead>
@@ -110,7 +169,7 @@ def build_html(articles, is_fallback):
 def send_email(articles, is_fallback):
     now = datetime.now().strftime("%m/%d %H:%M")
     subject = (f"📰 오늘의 뷰티 추천 [{now}] {len(articles)}건"
-               if is_fallback else f"📰 뉴스 알림 [{now}] {len(articles)}건")
+               if is_fallback else f"📰 뷰티 뉴스 알림 [{now}] {len(articles)}건")
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"]    = GMAIL_ADDRESS
@@ -124,13 +183,13 @@ def send_email(articles, is_fallback):
 if __name__ == "__main__":
     print(f"🔍 [{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 시작")
     articles = fetch_news()
-    print(f"키워드 매칭: {len(articles)}건")
+    print(f"  키워드 매칭: {len(articles)}건")
     if articles:
         send_email(articles, is_fallback=False)
     else:
-        print("매칭 없음 → 대체 기사 수집")
+        print("  매칭 없음 → 대체 기사 수집")
         fallback = fetch_fallback()
         if fallback:
             send_email(fallback, is_fallback=True)
         else:
-            print("대체 기사도 없음")
+            print("  ❌ 대체 기사도 없음")
