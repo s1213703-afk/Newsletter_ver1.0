@@ -15,7 +15,7 @@ RECV_ADDRESS       = os.environ["RECV_ADDRESS"].split(",")
 
 MAX_PER_CATEGORY = 2     # 카테고리별 최대 기사 수
 FALLBACK_COUNT   = 5     # 추천 뉴스 수
-WINDOW           = "7d"  # 최근 며칠 기사만 (예: 3d, 7d, 15d)
+WINDOW           = "7d"  # 최근 며칠 기사만 (예: 3d, 7d, 30d)
 
 
 def gnews(query):
@@ -49,6 +49,23 @@ SOURCES = {
         "조각투자 자본시장법 개정",
         ["자본시장법", "전자증권법", "조각투자", "토큰증권", "장외거래",
          "금융위원회", "증권선물위원회", "금융감독원", "법안", "개정안", "가이드라인"],
+    ),
+    "정유신 대표": (
+        "정유신 대표",
+        ["정유신"],
+    ),
+    "정중락 대표": (
+        "정중락 대표",
+        ["정중락"],
+    ),
+    "디지털자산": (
+        "디지털자산",
+        ["디지털자산", "디지털 자산", "가상자산", "스테이블코인"],
+    ),
+    "디지털자산 법안": (
+        "디지털자산기본법 개정",
+        ["디지털자산기본법", "가상자산이용자보호법", "디지털자산", "디지털 자산",
+         "가상자산", "스테이블코인", "법안", "개정안", "금융위원회"],
     ),
 }
 
@@ -158,7 +175,7 @@ def build_html(category_results, fallback_articles):
 
     return f"""<html><body style="font-family:Arial,sans-serif;max-width:800px;margin:auto">
       <div style="background:#0f4c81;color:white;padding:16px 20px;border-radius:8px 8px 0 0">
-        <h2 style="margin:0">📈 조각투자·장외거래소 뉴스 알림</h2>
+        <h2 style="margin:0">📈 조각투자·장외거래소·디지털자산 뉴스 알림</h2>
         <p style="margin:4px 0 0;font-size:13px;opacity:0.85">{now} 기준 · 최근 {WINDOW} · 총 {total}건</p>
       </div>
       <table width="100%" cellspacing="0" cellpadding="0"
@@ -176,11 +193,11 @@ def build_html(category_results, fallback_articles):
 
 
 def send_email(category_results, fallback_articles):
-    total   = sum(len(v) for v in category_results.values())
-    now     = datetime.now().strftime("%m/%d %H:%M")
+    total = sum(len(v) for v in category_results.values())
+    now   = datetime.now().strftime("%m/%d %H:%M")
 
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = f"📈 조각투자·장외거래소 뉴스 [{now}] {total}건"
+    msg["Subject"] = f"📈 조각투자·디지털자산 뉴스 [{now}] {total}건"
     msg["From"]    = GMAIL_ADDRESS
     msg["To"]      = GMAIL_ADDRESS
     msg["Bcc"]     = ", ".join(RECV_ADDRESS)
