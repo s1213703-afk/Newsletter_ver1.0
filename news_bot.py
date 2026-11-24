@@ -15,7 +15,7 @@ RECV_ADDRESS       = os.environ["RECV_ADDRESS"].split(",")
 
 MAX_PER_CATEGORY = 2     # 카테고리별 최대 기사 수
 FALLBACK_COUNT   = 5     # 추천 뉴스 수
-WINDOW           = "7d"  # 최근 며칠 기사만 (예: 3d, 7d, 30d)
+WINDOW           = "3d"  # 최근 며칠 기사만 (예: 3d, 7d, 30d)
 
 
 def gnews(query):
